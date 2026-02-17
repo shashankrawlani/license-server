@@ -1,0 +1,31 @@
+services:
+  license-server:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    # No depends_on needed if using external DB, or user can add if they put them in same compose
+    environment:
+      - ENVIRONMENT=dev
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-license-server@automationtester.in}
+      - BASE_URL=${BASE_URL:-http://localhost:8001}
+      # Use host.docker.internal to reach the DB on the host's 5432 port from inside container
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/license_server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./src:/app/src
+      - ./llms.txt:/app/llms.txt
+      - ./llms-full.txt:/app/llms-full.txt
+    secrets:
+      - admin_api_key
+      - resend_api_key
+    command: uvicorn license_server.main:app --host 0.0.0.0 --port 8001 --reload
+    restart: unless-stopped
+
+secrets:
+  admin_api_key:
+    file: ./secrets/admin_api_key.txt
+  resend_api_key:
+    file: ./secrets/resend_api_key.txt

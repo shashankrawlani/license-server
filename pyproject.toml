@@ -1,0 +1,49 @@
+[project]
+name = "license-server"
+version = "0.1.0"
+description = "Standalone FastAPI service for managing and verifying RSA-signed license keys."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "cryptography>=43.0.0",
+    "email-validator>=2.0.0",
+    "fastapi>=0.128.0",
+    "greenlet>=3.3.1",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.1",
+    "psycopg2-binary>=2.9.10",
+    "pydantic-settings>=2.13.0",
+    "pydantic[email]>=2.0.0",
+    "python-dotenv>=1.2.0",
+    "resend>=2.4.0",
+    "slowapi>=0.1.9",
+    "sqlmodel>=0.0.32",
+    "uvicorn>=0.30.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "C90", "B", "UP", "A", "T20", "RET", "SIM", "ASYNC"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["license_server"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "--cov=src/license_server --cov-config=.coveragerc --cov-report=term-missing"

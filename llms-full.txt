@@ -1,0 +1,678 @@
+# User Journey: License Server
+
+This document outlines the full lifecycle of a license, from registration to validation and revocation.
+
+## 1. Community License Journey
+
+The community license is a self-service flow designed for individuals and open-source contributors.
+
+### Step 1: Registration
+The user provides their email and basic details.
+- **Endpoint**: `POST /register`
+- **Payload**:
+  ```json
+  {
+    "email": "user@example.com",
+    "name": "Jane Doe",
+    "company": "Personal",
+    "use_case": "Development"
+  }
+  ```
+- **Action**: The server stores a `VerificationRequest` and sends a verification email via Resend.
+
+### Step 2: Email Verification
+The user clicks the link in their email.
+- **Endpoint**: `GET /verify-email?token=xyz...`
+- **Action**: The server validates the token, creates a `community` tier license (valid for 10 years), and sends a second email containing:
+  - The **License Key**
+  - The **Public Key** (used for local verification)
+
+### Step 3: Activation
+The user adds the `LICENSE_KEY` and `LICENSE_PUBLIC_KEY` to their application's `.env` file.
+
+---
+
+## 2. Enterprise License Journey
+
+Enterprise licenses are managed by administrators for paid tiers.
+
+### Step 1: Request
+The user contacts the team or completes a purchase.
+
+### Step 2: Generation (Admin)
+An administrator generates the license using their `ADMIN_API_KEY`.
+- **Endpoint**: `POST /generate-license`
+- **Headers**: `Authorization: Bearer <ADMIN_API_KEY>`
+- **Payload**:
+  ```json
+  {
+    "email": "enterprise@corp.com",
+    "tier": "enterprise",
+    "days": 365,
+    "features": ["unlimited_tokens", "priority_support"]
+  }
+  ```
+- **Action**: The server generates a signed license key and returns it immediately to the admin, who then shares it with the customer.
+
+---
+
+## 3. License Validation Journey
+
+The client application validates the license on startup or periodically.
+
+### Remote Validation (Recommended)
+The client calls the license server to check if the key is still valid and not revoked.
+- **Endpoint**: `POST /validate-license?license_key=...`
+- **Response**:
+  ```json
+  {
+    "valid": true,
+    "tier": "enterprise",
+    "email": "enterprise@corp.com",
+    "expires_at": "..."
+  }
+  ```
+
+### Local Verification (Offline)
+The client can verify the signature using the `PUBLIC_KEY` without calling the server. This confirms the key was indeed signed by this server and has not been tampered with.
+
+---
+
+## 4. Revocation Journey
+
+If a subscription expires or a key is leaked, an admin can revoke it.
+
+### Action (Admin)
+- **Endpoint**: `POST /revoke-license`
+- **Headers**: `Authorization: Bearer <ADMIN_API_KEY>`
+- **Params**: `email=...` or `license_key=...`
+- **Action**: The license is marked as `revoked_at` in the database. Future `validate-license` calls will return `false`.
+
+---
+
+## 5. Generic Schema & Extensibility
+
+The server is designed to be a "Lego brick" for any application. It uses three key fields to drive business logic without requiring database migrations.
+
+### A. Tier (`str`)
+The coarse-grained access level.
+- **Common values**: `community`, `pro`, `enterprise`, `trial`.
+- **Application Logic**:
+  ```python
+  if license.tier == "enterprise":
+      enable_sso()
+  ```
+
+### B. Features (`List[str]`)
+Fine-grained capability flags.
+- **Example**: `["advanced_analytics", "api_access", "white_labeling"]`
+- **Application Logic**:
+  ```python
+  if "api_access" in license.features:
+      allow_request()
+  ```
+
+### C. License Metadata (`dict`)
+The "catch-all" JSON store for organizational or limit-based data.
+- **Example**:
+  ```json
+  {
+    "max_seats": 50,
+    "org_id": "org_99",
+    "region": "us-east-1"
+  }
+  ```
+- **Application Logic**:
+  ```python
+  if current_active_users >= license.metadata.get("max_seats", 1):
+      raise QuotaExceeded()
+  ```
+# API Reference: License Server
+
+## Public Endpoints
+
+### Health Check
+- **Endpoint**: `GET /health`
+- **Summary**: Returns the status of the server.
+- **Response**: `{"status": "healthy"}`
+
+### Community Registration
+- **Endpoint**: `POST /register`
+- **Payload**: `RegistrationCreate`
+- **Rate Limit**: 5 requests per minute.
+- **Summary**: Initiates the registration flow and sends a verification email.
+
+### Email Verification
+- **Endpoint**: `GET /verify-email`
+- **Params**: `token` (string)
+- **Rate Limit**: 10 requests per minute.
+- **Summary**: Validates the email token and issues a community license.
+
+### License Validation
+- **Endpoint**: `POST /validate-license`
+- **Params**: `license_key` (string)
+- **Rate Limit**: 60 requests per minute.
+- **Summary**: Checks if a license is active, not revoked, and not expired.
+
+---
+
+## Admin Endpoints
+*Require `Authorization: Bearer <ADMIN_API_KEY>` header.*
+
+### Generate License
+- **Endpoint**: `POST /generate-license`
+- **Payload**: `LicenseCreate` (email, tier, days, etc.)
+- **Summary**: Manually generate an enterprise or community license.
+
+### Revoke License
+- **Endpoint**: `POST /revoke-license`
+- **Params**: `email` (optional), `license_key` (optional), `reason` (optional)
+- **Summary**: Marks one or more licenses as revoked.
+
+### List Licenses
+- **Endpoint**: `GET /licenses`
+- **Response**: `List[License]`
+- **Summary**: Returns all license records in the database.
+
+---
+
+## Data Schema
+
+### License Request (`LicenseCreate`)
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `email` | `EmailStr` | Owner's email address |
+| `tier` | `str` | coarse access level (e.g., `community`, `enterprise`) |
+| `days` | `int` | Expiry duration from today (default: 365) |
+| `features` | `List[str]` | List of enabled feature flags |
+| `license_metadata` | `dict` | Custom JSON data (seats, org_id, etc.) |
+
+**Example Production Payload**:
+```json
+{
+  "email": "customer@bigcorp.com",
+  "tier": "enterprise",
+  "days": 730,
+  "features": ["audit_logs", "dedicated_db"],
+  "license_metadata": {
+    "max_seats": 500,
+    "customer_id": "CUST-12345"
+  }
+}
+```
+
+---
+
+## Local Verification
+For high-performance or offline use cases, clients can verify licenses locally using the RSA Public Key.
+- **Method**: RSA-PSS signature verification.
+- **Hashing**: SHA-256.
+- **Payload**: JSON claims (email, tier, expiry).
+from datetime import datetime, timezone
+from typing import Optional, List
+from sqlmodel import SQLModel, Field, JSON, Column, DateTime
+import uuid
+from pydantic import EmailStr
+
+class LicenseBase(SQLModel):
+    """Base schema for license data.
+
+    Attributes:
+        email: Owner's email address.
+        tier: Licensing tier (default: community).
+        expires_at: Expiration timestamp with timezone.
+        features: List of enabled feature flags.
+        license_metadata: Custom organizational/limit data.
+    """
+    email: EmailStr = Field(index=True)
+    tier: str = Field(default="community")
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    features: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    license_metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
+
+class License(LicenseBase, table=True):
+    """Database model for a signed license key.
+    
+    Contains the cryptographic key and revocation status.
+    """
+    """Database model for a license.
+
+    Attributes:
+        id: Unique identifier for the license.
+        license_key: The actual license key string.
+        issued_at: Timestamp when the license was issued.
+        revoked_at: Optional timestamp if the license was revoked.
+        revoked_reason: Optional reason for revocation.
+    """
+    __tablename__ = "licenses"
+    
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        index=True,
+        nullable=False,
+    )
+    license_key: str
+    issued_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    revoked_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    revoked_reason: Optional[str] = None
+
+class LicenseCreate(SQLModel):
+    """Schema for creating a new license via admin.
+    
+    Attributes:
+        email: Recipient email.
+        tier: Desired tier.
+        days: Validity period in days.
+        features: List of feature flags.
+        license_metadata: Custom JSON data.
+    """
+    """Schema for creating a new license.
+
+    Attributes:
+        email: Owner's email address.
+        tier: Licensing tier (default: enterprise).
+        days: Number of days until the license expires (default: 365).
+        features: List of enabled feature flags.
+        license_metadata: Custom organizational/limit data.
+    """
+    email: EmailStr
+    tier: str = "enterprise"
+    days: int = 365
+    features: List[str] = []
+    license_metadata: dict = {}
+
+class RegistrationCreate(SQLModel):
+    """Schema for creating a new registration request.
+
+    Attributes:
+        email: User's email address.
+        name: Optional user's name.
+        company: Optional user's company.
+        use_case: Optional description of the user's use case.
+    """
+    email: EmailStr
+    name: Optional[str] = None
+    company: Optional[str] = None
+    use_case: Optional[str] = None
+
+class LicenseResponse(SQLModel):
+    license_key: str
+    tier: str
+    expires_at: datetime
+    email: str
+
+class RegistrationResponse(SQLModel):
+    email: EmailStr
+    message: str
+    license_key: Optional[str] = None
+    tier: Optional[str] = None
+
+class VerificationRequest(SQLModel, table=True):
+    """Database model for self-service registration requests.
+    
+    Stores a temporary verification token sent via email.
+    """
+    __tablename__ = "verification_requests"
+    
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        primary_key=True,
+        index=True,
+        nullable=False,
+    )
+    email: EmailStr = Field(index=True)
+    token: str = Field(index=True)
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    
+    # Store registration metadata as JSON
+    registration_data: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    verified_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Request, BackgroundTasks
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta, timezone
+from typing import List
+import os
+import secrets
+
+from .database import get_session
+from .models import (
+    License, LicenseCreate, LicenseResponse, 
+    RegistrationCreate, RegistrationResponse, VerificationRequest
+)
+from .limiter import limiter
+from .crypto import sign_license
+from .config import settings
+import resend
+
+router = APIRouter()
+
+def send_email(to_email: str, subject: str, html_content: str):
+    """Helper function to send emails via Resend."""
+    if not settings.RESEND_API_KEY:
+        print(f"\n[DEV MODE] Email to {to_email} skipped (No API Key). Subject: {subject}\n")
+        return
+        
+    try:
+        resend.api_key = settings.RESEND_API_KEY
+        resend.Emails.send({
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": to_email,
+            "subject": subject,
+            "html": html_content
+        })
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+def get_public_key():
+    """Retrieves the RSA public key in PEM format.
+
+    Returns:
+        str: The public key content or an error message if not found.
+    """
+    if os.path.exists(settings.PUBLIC_KEY_PATH):
+        with open(settings.PUBLIC_KEY_PATH, "r") as f:
+            return f.read()
+    return "Error: Public key file not found."
+
+security = HTTPBearer()
+
+async def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Security dependency to verify the Admin API Key.
+
+    Args:
+        credentials: The HTTP Bearer credentials from the request.
+
+    Returns:
+        str: The validated admin API key.
+
+    Raises:
+        HTTPException: If the key is missing or incorrect.
+    """
+    if not settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
+    if credentials.credentials != settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return credentials.credentials
+
+@router.post("/register", response_model=RegistrationResponse)
+@limiter.limit("5/minute")
+async def register_community(request: Request, data: RegistrationCreate, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)):
+    """Initiates a self-service registration for a community license.
+
+    Saves a verification request and queues a verification email.
+
+    Args:
+        request: The FastAPI request object (for rate limiting).
+        data: Registration details (email, name, etc.).
+        background_tasks: FastAPI background tasks handler.
+        session: Asynchronous database session.
+
+    Returns:
+        RegistrationResponse: A message confirming the email was sent.
+    """
+    # 1. Check if an active license already exists
+    statement = select(License).where(
+        License.email == data.email, 
+        License.tier == "community",
+        License.revoked_at == None
+    )
+    results = await session.execute(statement)
+    existing = results.scalars().first()
+    
+    if existing:
+        return RegistrationResponse(
+            email=data.email,
+            message="An active community license already exists for this email. Please check your inbox or contact support."
+        )
+    
+    # 2. Generate Verification Request
+    token = secrets.token_hex(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    
+    new_request = VerificationRequest(
+        email=data.email,
+        token=token,
+        expires_at=expires_at,
+        registration_data={
+            "name": data.name,
+            "company": data.company,
+            "use_case": data.use_case
+        }
+    )
+    session.add(new_request)
+    await session.commit()
+ 
+    # 3. Send Verification Email
+    verification_link = f"{settings.BASE_URL}/verify-email?token={token}"
+    email_subject = "Verify your LLM Router Registration"
+    email_html = f"""
+    <h3>Welcome to LLM Router!</h3>
+    <p>Please click the link below to verify your email and retrieve your license key:</p>
+    <p><a href="{verification_link}">{verification_link}</a></p>
+    <p>If you did not request this, please ignore this email.</p>
+    """
+    
+    background_tasks.add_task(send_email, data.email, email_subject, email_html)
+    
+    return RegistrationResponse(
+        email=data.email,
+        message="Verification email sent. Please click the link in your inbox to retrieve your license key."
+    )
+
+@router.get("/verify-email", response_model=RegistrationResponse)
+@limiter.limit("10/minute")
+async def verify_email(request: Request, token: str, background_tasks: BackgroundTasks, session: AsyncSession = Depends(get_session)):
+    """Verifies an email token and issues a community license.
+
+    Args:
+        request: The FastAPI request object.
+        token: The unique verification token from the email.
+        background_tasks: FastAPI background tasks handler.
+        session: Asynchronous database session.
+
+    Returns:
+        RegistrationResponse: The issued license key and a success message.
+
+    Raises:
+        HTTPException: If the token is invalid or expired.
+    """
+    # 1. Find the request
+    statement = select(VerificationRequest).where(
+        VerificationRequest.token == token,
+        VerificationRequest.verified_at == None
+    )
+    results = await session.execute(statement)
+    verify_req = results.scalars().first()
+    
+    if not verify_req:
+        raise HTTPException(status_code=404, detail="Invalid or expired verification token.")
+    
+    if verify_req.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification token has expired.")
+    
+    # 2. Create the Community License (10 year expiry)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=3650)
+    key = sign_license(verify_req.email, "community", expires_at)
+    
+    new_license = License(
+        email=verify_req.email,
+        tier="community",
+        license_key=key,
+        expires_at=expires_at,
+        license_metadata=verify_req.registration_data
+    )
+    
+    # 3. Mark as verified and save license
+    verify_req.verified_at = datetime.now(timezone.utc)
+    session.add(new_license)
+    session.add(verify_req)
+    await session.commit()
+    await session.refresh(new_license)
+    
+    # 4. Send License Email
+    public_key = get_public_key()
+    email_subject = "Your LLM Router License Key"
+    email_html = f"""
+    <h3>Email Verified!</h3>
+    <p>Your LLM Router community license key is now active.</p>
+    
+    <h4>Setup Instructions:</h4>
+    <ol>
+        <li>Add the <code>LICENSE_KEY</code> to your <code>.env</code> file.</li>
+        <li>Add the <code>LICENSE_PUBLIC_KEY</code> to your <code>.env</code> file (copy the block below).</li>
+    </ol>
+    <p><strong>LICENSE_KEY:</strong><br/>
+    <code>{key}</code></p>
+    <p><strong>LICENSE_PUBLIC_KEY:</strong> (Save this exactly as shown including headers)<br/>
+    <pre>{public_key}</pre></p>
+    """
+    
+    background_tasks.add_task(send_email, verify_req.email, email_subject, email_html)
+    
+    return {
+        "email": verify_req.email,
+        "license_key": key,
+        "tier": "community",
+        "message": "Email verified! Your community license key is active and has been sent to your inbox."
+    }
+
+@router.post("/generate-license", response_model=LicenseResponse, dependencies=[Depends(verify_admin)])
+async def generate_license(data: LicenseCreate, session: AsyncSession = Depends(get_session)):
+    """Manually generates a license (Admin only).
+
+    Args:
+        data: License configuration (tier, days, features, metadata).
+        session: Asynchronous database session.
+
+    Returns:
+        LicenseResponse: The generated license details and key.
+    """
+    expires_at = datetime.now(timezone.utc) + timedelta(days=data.days)
+    key = sign_license(data.email, data.tier, expires_at)
+    
+    new_license = License(
+        email=data.email,
+        tier=data.tier,
+        license_key=key,
+        expires_at=expires_at,
+        features=data.features,
+        license_metadata=data.license_metadata
+    )
+    session.add(new_license)
+    await session.commit()
+    await session.refresh(new_license)
+    
+    return LicenseResponse(
+        license_key=key,
+        tier=data.tier,
+        expires_at=expires_at,
+        email=data.email
+    )
+
+@router.post("/validate-license")
+@limiter.limit("60/minute")
+async def validate_license(request: Request, license_key: str, session: AsyncSession = Depends(get_session)):
+    """Validates a license key against the database.
+
+    Checks for existence, expiration, and revocation.
+
+    Args:
+        request: The FastAPI request object.
+        license_key: The license key string to validate.
+        session: Asynchronous database session.
+
+    Returns:
+        dict: Validation status and license metadata.
+
+    Raises:
+        HTTPException: If the license is not found, revoked, or expired.
+    """
+    # Find active license
+    statement = select(License).where(
+        License.license_key == license_key,
+        License.revoked_at == None
+    )
+    results = await session.execute(statement)
+    license_record = results.scalars().first()
+    
+    if not license_record:
+        raise HTTPException(status_code=404, detail="License not found or revoked")
+    
+    expires_at = license_record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=403, detail="License expired")
+    
+    return {
+        "valid": True,
+        "tier": license_record.tier,
+        "email": license_record.email,
+        "expires_at": license_record.expires_at
+    }
+
+@router.post("/revoke-license", dependencies=[Depends(verify_admin)])
+async def revoke_license(email: str = None, license_key: str = None, reason: str = "Revoked by admin", session: AsyncSession = Depends(get_session)):
+    """Revokes one or more licenses (Admin only).
+
+    Args:
+        email: Optional email to revoke all licenses for.
+        license_key: Optional specific license key to revoke.
+        reason: Optional reason for revocation.
+        session: Asynchronous database session.
+
+    Returns:
+        dict: A message confirming the number of revoked licenses.
+
+    Raises:
+        HTTPException: If no active license is found to revoke.
+    """
+    if not email and not license_key:
+        raise HTTPException(status_code=400, detail="Email or license_key required")
+    
+    query = select(License).where(License.revoked_at == None)
+    if email:
+        query = query.where(License.email == email)
+    if license_key:
+        query = query.where(License.license_key == license_key)
+        
+    results = await session.execute(query)
+    records = results.scalars().all()
+    if not records:
+        raise HTTPException(status_code=404, detail="Active license not found")
+        
+    for record in records:
+        record.revoked_at = datetime.now(timezone.utc)
+        record.revoked_reason = reason
+        session.add(record)
+        
+    await session.commit()
+    return {"message": f"Revoked {len(records)} licenses"}
+
+@router.get("/licenses", response_model=List[License], dependencies=[Depends(verify_admin)])
+async def list_licenses(session: AsyncSession = Depends(get_session)):
+    """Lists all licenses in the database (Admin only).
+
+    Returns:
+        List[License]: A list of all license records.
+    """
+    results = await session.execute(select(License))
+    return results.scalars().all()

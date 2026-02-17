@@ -1,0 +1,24 @@
+# License Server
+
+A standalone, production-ready licensing service. Built with FastAPI, SQLModel, and RSA-PSS cryptography.
+
+> [!NOTE]
+> This file is optimized for LLM readability. For a human-friendly version, see [README.md](README.md).
+
+## Key Resources
+- [User Journey](docs/user_journey.md): Lifecycle of community and enterprise licenses.
+- [API Reference](docs/api_reference.md): Detailed endpoint and schema definitions.
+- [llms-full.txt](llms-full.txt): Complete project context including documentation and source code.
+
+## Project Structure
+- `src/license_server/`: Core logic.
+  - `crypto.py`: RSA keypair generation and license signing/verification.
+  - `models.py`: SQLModel database and API schemas.
+  - `routes.py`: FastAPI endpoints for registration, validation, and management.
+- `docs/`: Markdown guides.
+- `tests/`: 100% covered test suite.
+
+## Licensing Schema
+- **Tier**: Coarse access level (`community`, `pro`, `enterprise`).
+- **Features**: List of fine-grained capability flags.
+- **Metadata**: JSON object for custom limits (e.g., `max_seats`).
