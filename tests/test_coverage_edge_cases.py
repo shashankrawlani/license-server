@@ -217,13 +217,11 @@ async def test_send_email_fallback(capsys):
             assert "Failed to send email" in captured.out
 
 @pytest.mark.asyncio
-async def test_send_email_no_api_key(capsys):
+async def test_send_email_no_api_key(caplog):
     """Test send_email skips when no API key configured."""
     with patch("license_server.routes.settings.RESEND_API_KEY", None):
         send_email("to@ex.com", "Subject", "Body")
-        captured = capsys.readouterr()
-        assert "DEV MODE" in captured.out
-        assert "skipped" in captured.out
+        assert "Email skipped" in caplog.text
 
 @pytest.mark.asyncio
 async def test_missing_private_key_generation(temp_keys_dir):

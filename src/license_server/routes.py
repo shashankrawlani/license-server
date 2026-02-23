@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 import os
 import secrets
+import logging
 
 from .database import get_session
 from .models import (
@@ -20,13 +21,14 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 ph = PasswordHasher()
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 def send_email(to_email: str, subject: str, html_content: str):
     """Helper function to send emails via Resend."""
     if not settings.RESEND_API_KEY:
-        print(f"\n[DEV MODE] Email to {to_email} skipped (No API Key). Subject: {subject}\n")
+        logger.debug(f"Email skipped (no API key): {to_email} - {subject}")
         return
         
     try:
@@ -282,6 +284,8 @@ async def verify_email(request: Request, token: str, background_tasks: Backgroun
     await session.commit()
     await session.refresh(new_license)
     
+    logger.info(f"License issued: {verify_req.email} (app: {verify_req.app_id}, tier: community)")
+    
     # 4. Handle Notification (Email vs Delegation)
     public_key = get_public_key()
     email_subject = "Your Community License Key"
@@ -437,6 +441,8 @@ async def create_app(name: str, slug: str, session: AsyncSession = Depends(get_s
     await session.commit()
     
     _invalidate_app_cache()
+    
+    logger.info(f"App created: {slug}")
     
     return {
         "slug": slug,
