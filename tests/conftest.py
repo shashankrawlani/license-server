@@ -11,9 +11,9 @@ from sqlmodel import SQLModel, select, delete
 from license_server.config import settings
 from unittest.mock import patch
 
-# Set testing environment variables - use file-based SQLite for tests
+# Set testing environment variables - use file-based SQLite in data directory
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test_licenses.db"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///data/test_licenses.db"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["BASE_URL"] = "http://testserver"
 os.environ["ENVIRONMENT"] = "dev"

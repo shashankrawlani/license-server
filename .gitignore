@@ -14,9 +14,10 @@ ENV/
 env.bak/
 venv.bak/
 
-# SQLite
+# SQLite & Data
 *.db
 *.db-journal
+data/
 
 # RSA Keys (KEEP SECURE - NEVER COMMIT)
 *.pem
@@ -33,5 +34,4 @@ htmlcov/
 .docker/
 site/
 .playwright-cli/
-test_licenses.db
 .kiro/
