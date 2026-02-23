@@ -26,7 +26,8 @@ This project is optimized for LLMs. Access high-density context files directly f
 
 ## ✨ Key Features
 - **Dual Deployment Modes**: Runs as a **sidecar** (single-app) or **central multi-tenant server**.
-- **Standalone & Portable**: A "Lego brick" microservice.
+- **Standalone & Portable**: A "Lego brick" microservice - runs in isolation without external dependencies.
+- **Zero Seeding**: Starts completely empty - no default apps or data.
 - **Cryptographic Security**: RSA-2048 with PSS padding.
 - **Generic Schema**: Extensible `tier`, `features`, and `metadata`.
 - **Hot Reload**: Seamless development inside Docker with `uvicorn --reload`.
@@ -93,6 +94,12 @@ If you are upgrading an existing deployment that used the "default" app:
 # Install dependencies
 uv sync
 
+# Configure database (choose one):
+# PostgreSQL (recommended for production):
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/license_server"
+# SQLite (good for development):
+export DATABASE_URL="sqlite:///data/licenses.db"
+
 # Initialize DB and run (keys generated automatically on first start)
 PYTHONPATH=src uv run uvicorn license_server.main:app --host 0.0.0.0 --port 8321
 
@@ -105,13 +112,33 @@ curl -X POST http://localhost:8321/admin/apps \
 PYTHONPATH=src uv run pytest tests/ --cov=src/license_server
 ```
 
+### Database Support
+
+The server supports both **PostgreSQL** (recommended for production) and **SQLite** (good for development/testing).
+
+**PostgreSQL**:
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+```
+
+**SQLite**:
+```bash
+DATABASE_URL=sqlite:///data/licenses.db
+```
+
+Tests use SQLite by default for speed. To test with PostgreSQL:
+```bash
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/license_server_test"
+uv run pytest tests/
+```
+
 ### Deployment (Docker)
 
 #### 🚀 Production Build
-The server requires a **PostgreSQL** database.
+The server works with both PostgreSQL and SQLite. Configure via `DATABASE_URL` in `.env`.
 
 **Requirements**:
-- A PostgreSQL instance accessible via the network.
+- A database (PostgreSQL recommended for production, SQLite for single-instance deployments).
 
 ```bash
 # Start the license server

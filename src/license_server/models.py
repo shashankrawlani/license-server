@@ -9,7 +9,7 @@ class App(SQLModel, table=True):
     """Database model for an application using the license server.
     
     Attributes:
-        slug: Unique identifier for the app (e.g., 'routellm').
+        slug: Unique identifier for the app (e.g., 'myapp', 'api-v2').
         name: Human-readable name of the app.
         api_key_hash: Argon2 hash of the app's secret API key.
         created_at: Timestamp when the app was registered.

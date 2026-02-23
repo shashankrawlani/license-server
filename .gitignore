@@ -33,3 +33,5 @@ htmlcov/
 .docker/
 site/
 .playwright-cli/
+test_licenses.db
+.kiro/

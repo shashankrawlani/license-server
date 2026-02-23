@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     
     # App Support
     MULTI_TENANT_MODE: bool = Field(default=False, description="Enable multi-app isolation. If False, follows sidecar/internal model.")
-    ROUTELLM_APP_KEY: str | None = Field(None, description="Static API key for the legacy 'routellm' app (used during migration/seeding)")
     
     def model_post_init(self, __context):
         # Manually load secrets if not set by env vars

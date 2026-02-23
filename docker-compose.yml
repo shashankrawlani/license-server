@@ -15,7 +15,6 @@ services:
       - BASE_URL=${BASE_URL:-http://localhost:8321}
       - MULTI_TENANT_MODE=${MULTI_TENANT_MODE:-False}
     networks:
-      - routellm_default
       - internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -44,8 +43,6 @@ services:
 networks:
   internal:
     driver: bridge
-  routellm_default:
-    external: true
 
 secrets:
   admin_api_key:

@@ -11,9 +11,9 @@ from sqlmodel import SQLModel, select, delete
 from license_server.config import settings
 from unittest.mock import patch
 
-# Set testing environment variables
+# Set testing environment variables - use file-based SQLite for tests
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:postgres@localhost:5432/license_server_test"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test_licenses.db"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["BASE_URL"] = "http://testserver"
 os.environ["ENVIRONMENT"] = "dev"
@@ -32,8 +32,12 @@ settings.ENVIRONMENT = "dev"
 # Disable rate limiting for tests
 limiter.enabled = False
 
-# Test engine using NullPool for strict isolation and to avoid "operation in progress" errors in tests
-test_engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+# Test engine using in-memory SQLite
+test_engine = create_async_engine(
+    os.environ["DATABASE_URL"],
+    connect_args={"check_same_thread": False},
+    poolclass=NullPool
+)
 test_async_session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 @pytest.fixture(scope="session", autouse=True)

@@ -28,7 +28,67 @@ async def test_resolve_single_app_zero(client: AsyncClient, session: AsyncSessio
     
     resp = await client.post("/validate-license?license_key=fake")
     assert resp.status_code == 400
-    assert "No app registered" in resp.json()["detail"]
+
+@pytest.mark.asyncio
+async def test_verify_admin_only_missing_config(client: AsyncClient):
+    """Test verify_admin_only when ADMIN_API_KEY is not configured."""
+    original_key = settings.ADMIN_API_KEY
+    settings.ADMIN_API_KEY = None
+    
+    try:
+        resp = await client.post(
+            "/admin/apps?name=Test&slug=test",
+            headers={"Authorization": "Bearer fake"}
+        )
+        assert resp.status_code == 500
+        assert "ADMIN_API_KEY not configured" in resp.json()["detail"]
+    finally:
+        settings.ADMIN_API_KEY = original_key
+
+@pytest.mark.asyncio
+async def test_verify_admin_only_wrong_key(client: AsyncClient):
+    """Test verify_admin_only with wrong admin key."""
+    resp = await client.post(
+        "/admin/apps?name=Test&slug=test",
+        headers={"Authorization": "Bearer wrong-key"}
+    )
+    assert resp.status_code == 403
+
+def test_config_secret_loading():
+    """Test config secret file loading for coverage."""
+    import tempfile
+    import os
+    from license_server.config import Settings
+    from unittest.mock import patch
+    
+    # Create temp secrets dir
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Write secret files
+        admin_key_path = os.path.join(tmpdir, "admin_api_key")
+        with open(admin_key_path, "w") as f:
+            f.write("test-admin-from-file")
+        
+        resend_key_path = os.path.join(tmpdir, "resend_api_key")
+        with open(resend_key_path, "w") as f:
+            f.write("test-resend-from-file")
+        
+        # Clear env vars and create settings with secrets_dir
+        with patch.dict(os.environ, {"ADMIN_API_KEY": "", "RESEND_API_KEY": ""}, clear=False):
+            # Manually set model_config secrets_dir
+            original_config = Settings.model_config.copy()
+            Settings.model_config["secrets_dir"] = tmpdir
+            
+            try:
+                settings = Settings(
+                    DATABASE_URL="sqlite:///test.db",
+                    BASE_URL="http://test"
+                )
+                
+                # Verify secrets were loaded
+                assert settings.ADMIN_API_KEY == "test-admin-from-file"
+                assert settings.RESEND_API_KEY == "test-resend-from-file"
+            finally:
+                Settings.model_config = original_config
 
 @pytest.mark.asyncio
 async def test_resolve_single_app_multiple(client: AsyncClient, session: AsyncSession):

@@ -14,9 +14,6 @@ ph = PasswordHasher()
 
 async def migrate():
     print("Starting Multi-App migration...")
-    
-    # 'routellm' legacy key (optional)
-    route_llm_key = settings.ROUTELLM_APP_KEY
 
     # Ensure we use the asyncpg driver
     db_url = settings.DATABASE_URL
@@ -39,19 +36,7 @@ async def migrate():
             );
         """))
 
-        # 2. Seed 'routellm' app (Optional — only if ROUTELLM_APP_KEY is set)
-        if route_llm_key:
-            print("Seeding legacy 'routellm' app...")
-            routellm_hash = ph.hash(route_llm_key)
-            await conn.execute(text("""
-                INSERT INTO apps (slug, name, api_key_hash)
-                VALUES (:slug, :name, :api_key_hash)
-                ON CONFLICT (slug) DO NOTHING;
-            """), {"slug": "routellm", "name": "RouteLLM", "api_key_hash": routellm_hash})
-        else:
-            print("No ROUTELLM_APP_KEY set. Skipping routellm seeding.")
-
-        # 3. Add app_id column to existing tables
+        # 2. Add app_id column to existing tables
         tables = ["licenses", "verification_requests"]
         for table in tables:
             print(f"Checking '{table}' for app_id...")
@@ -60,7 +45,7 @@ async def migrate():
                 print(f"Adding 'app_id' to '{table}'...")
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN app_id VARCHAR"))
 
-        # 4. Check for orphaned records (NULL app_id) — fail loudly
+        # 3. Check for orphaned records (NULL app_id) — fail loudly
         for table in tables:
             result = await conn.execute(text(f"SELECT COUNT(*) FROM {table} WHERE app_id IS NULL"))
             null_count = result.scalar()
@@ -75,7 +60,7 @@ async def migrate():
             print(f"Setting 'app_id' to NOT NULL in '{table}'...")
             await conn.execute(text(f"ALTER TABLE {table} ALTER COLUMN app_id SET NOT NULL"))
 
-        # 5. Add Constraints
+        # 4. Add Constraints
         print("Adding Foreign Key and Unique constraints...")
         
         # Licenses
