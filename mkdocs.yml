@@ -39,3 +39,6 @@ nav:
   - Home: index.md
   - User Journey: user_journey.md
   - API Reference: api_reference.md
+  - Development:
+      - Test Review: TEST_REVIEW.md
+      - Final Review: FINAL_REVIEW.md

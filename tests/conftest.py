@@ -45,6 +45,20 @@ async def setup_database():
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
 
+@pytest.fixture(params=[False, True], autouse=True)
+def toggle_multi_tenant(request):
+    """Parametrize all tests to run in both single and multi-tenant modes."""
+    settings.MULTI_TENANT_MODE = request.param
+    yield
+
+@pytest.fixture(autouse=True)
+def reset_app_cache():
+    """Reset the lazy app cache between tests to prevent stale state."""
+    import license_server.routes as routes_module
+    routes_module._cached_single_app = None
+    yield
+    routes_module._cached_single_app = None
+
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
@@ -53,16 +67,17 @@ def event_loop():
 
 @pytest.fixture(name="session")
 async def session_fixture() -> AsyncGenerator[AsyncSession, None]:
-    """Provide a session and clean up data after each test."""
-    from license_server.models import License, VerificationRequest
+    """Provide a session and clean up all data after each test."""
+    from license_server.models import License, VerificationRequest, App
     
     async with test_async_session_maker() as session:
         yield session
         
-        # Clean up data after each test to ensure isolation
+        # Clean up ALL data after each test for full isolation
         async with test_engine.begin() as conn:
             await conn.execute(delete(License))
             await conn.execute(delete(VerificationRequest))
+            await conn.execute(delete(App))
             await conn.commit()
 
 @pytest.fixture(name="client")
@@ -77,6 +92,27 @@ async def client_fixture(session: AsyncSession) -> AsyncGenerator[AsyncClient, N
     ) as client:
         yield client
     app.dependency_overrides.clear()
+
+@pytest.fixture
+async def test_app(session: AsyncSession):
+    """Create a test app and return its credentials."""
+    from license_server.models import App
+    from argon2 import PasswordHasher
+    import secrets
+    
+    ph = PasswordHasher()
+    api_key = secrets.token_hex(32)
+    api_key_hash = ph.hash(api_key)
+    
+    app_record = App(
+        slug="test-app",
+        name="Test Application",
+        api_key_hash=api_key_hash
+    )
+    session.add(app_record)
+    await session.commit()
+    
+    return {"slug": "test-app", "api_key": api_key}
 
 @pytest.fixture
 def temp_keys_dir():
@@ -99,3 +135,18 @@ def mock_send_email():
     """Mock send_email globally to avoid hitting Resend and fix domain errors."""
     with patch("license_server.routes.send_email") as mock:
         yield mock
+
+@pytest.fixture
+def target_app_id(test_app):
+    """Always use the test app slug."""
+    return test_app["slug"]
+
+@pytest.fixture
+def auth_headers(test_app):
+    """Headers for API calls based on mode."""
+    if settings.MULTI_TENANT_MODE:
+        return {
+            "X-App-Id": test_app["slug"],
+            "X-App-Key": test_app["api_key"]
+        }
+    return {} # Ignored in single-tenant mode

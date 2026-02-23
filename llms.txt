@@ -15,8 +15,9 @@ A standalone, production-ready licensing service. Built with FastAPI, SQLModel, 
   - `crypto.py`: RSA keypair generation and license signing/verification.
   - `models.py`: SQLModel database and API schemas.
   - `routes.py`: FastAPI endpoints for registration, validation, and management.
-- `docs/`: Markdown guides.
-- `tests/`: 100% covered test suite.
+- `docker-compose.yml`: Standard containerized production setup.
+- `docs/`: Expanded MkDocs guides for deployment and API.
+- `tests/`: 99% covered test suite.
 
 ## Licensing Schema
 - **Tier**: Coarse access level (`community`, `pro`, `enterprise`).

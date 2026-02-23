@@ -18,7 +18,16 @@ The user provides their email and basic details.
     "use_case": "Development"
   }
   ```
-- **Action**: The server stores a `VerificationRequest` and sends a verification email via Resend.
+- **Action**: The server stores a `VerificationRequest`.
+  - **Email Disabled (Default)**: Returns `verification_url` in the JSON response.
+    ```json
+    {
+      "email": "user@example.com",
+      "message": "Registration successful...",
+      "verification_url": "http://localhost:8321/verify-email?token=..."
+    }
+    ```
+  - **Email Enabled**: Sends a verification email via Resend.
 
 ### Step 2: Email Verification
 The user clicks the link in their email.

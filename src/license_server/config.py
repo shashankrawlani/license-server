@@ -8,10 +8,30 @@ class Settings(BaseSettings):
     
     # Resend Configuration
     RESEND_API_KEY: str | None = Field(None, description="API key for Resend email service")
-    RESEND_FROM_EMAIL: str = Field("routellm@automationtester.in", description="Email address to send from")
+    RESEND_FROM_EMAIL: str = Field("license-server@automationtester.in", description="Email address to send from")
+    EMAIL_ENABLED: bool = Field(False, description="Whether to send emails from this service")
+    
+    # App Support
+    MULTI_TENANT_MODE: bool = Field(default=False, description="Enable multi-app isolation. If False, follows sidecar/internal model.")
+    ROUTELLM_APP_KEY: str | None = Field(None, description="Static API key for the legacy 'routellm' app (used during migration/seeding)")
+    
+    def model_post_init(self, __context):
+        # Manually load secrets if not set by env vars
+        secrets_dir = self.model_config.get("secrets_dir")
+        if not self.RESEND_API_KEY and secrets_dir:
+            secret_path = os.path.join(secrets_dir, "resend_api_key")
+            if os.path.exists(secret_path):
+                with open(secret_path, "r") as f:
+                    self.RESEND_API_KEY = f.read().strip()
+        
+        if not self.ADMIN_API_KEY and secrets_dir:
+            secret_path = os.path.join(secrets_dir, "admin_api_key")
+            if os.path.exists(secret_path):
+                with open(secret_path, "r") as f:
+                    self.ADMIN_API_KEY = f.read().strip()
     
     # Base URL
-    BASE_URL: str = Field("http://localhost:8080", description="Base URL of the license server")
+    BASE_URL: str = Field("http://localhost:8321", description="Base URL of the license server")
     
     # Database
     DATABASE_URL: str = Field("postgresql://postgres:postgres@localhost:5432/license_server", description="PostgreSQL connection string")
@@ -24,7 +44,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = Field(True, description="Whether to enable rate limiting")
 
     # Environment
-    ENVIRONMENT: str = Field("production", description="Environment (dev, staging, production)")
+    ENVIRONMENT: str = Field("dev", description="Environment (dev, staging, production)")
 
     model_config = SettingsConfigDict(
         env_file=".env",

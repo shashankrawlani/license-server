@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone, timedelta
 from license_server.routes import send_email
+from license_server.config import settings
+
 
 def test_send_email_error_catch(capsys):
     """Test that send_email catches and prints exceptions instead of crashing."""
@@ -23,7 +25,7 @@ async def test_verify_email_invalid_token(client):
     assert "Invalid or expired verification token" in resp.json()["detail"]
 
 @pytest.mark.asyncio
-async def test_verify_email_expired_token(client, session):
+async def test_verify_email_expired_token(client, session, target_app_id):
     """Test 400 for expired verification token."""
     from license_server.models import VerificationRequest
     
@@ -31,6 +33,7 @@ async def test_verify_email_expired_token(client, session):
     expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
     req = VerificationRequest(
         email="expired@ex.com",
+        app_id=target_app_id,
         token="expired-token",
         expires_at=expires_at
     )
@@ -42,13 +45,14 @@ async def test_verify_email_expired_token(client, session):
     assert "Verification token has expired" in resp.json()["detail"]
 
 @pytest.mark.asyncio
-async def test_validate_license_expired(client, session):
+async def test_validate_license_expired(client, session, target_app_id, auth_headers):
     """Test 403 for expired but not revoked license."""
     from license_server.models import License
     
     expires_at = datetime.now(timezone.utc) - timedelta(days=1)
     req = License(
         email="user@ex.com",
+        app_id=target_app_id,
         tier="community",
         license_key="expired-key",
         expires_at=expires_at
@@ -56,7 +60,7 @@ async def test_validate_license_expired(client, session):
     session.add(req)
     await session.commit()
     
-    resp = await client.post("/validate-license?license_key=expired-key")
+    resp = await client.post("/validate-license?license_key=expired-key", headers=auth_headers)
     assert resp.status_code == 403
     assert "License expired" in resp.json()["detail"]
 

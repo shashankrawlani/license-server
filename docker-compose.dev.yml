@@ -1,42 +1,58 @@
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    image: postgres:15-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: license_server
-    ports:
-      - "5432:5432"
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=license_server
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d license_server"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
   license-server:
     build: 
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8001:8001"
+      - "8321:8321"
     environment:
       - ENVIRONMENT=dev
       - RESEND_FROM_EMAIL=license-server@automationtester.in
-      - BASE_URL=http://localhost:8001
+      - BASE_URL=http://localhost:8321
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/license_server
+    networks:
+      - internal
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./src:/app/src
-      - ./llms.txt:/app/llms.txt
-      - ./llms-full.txt:/app/llms-full.txt
+      - ./src:/app/src:delegated
+      - ./llms.txt:/app/llms.txt:delegated
+      - ./llms-full.txt:/app/llms-full.txt:delegated
+      - ./data:/app/data:cached
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8321/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     secrets:
       - admin_api_key
       - resend_api_key
-    command: uvicorn license_server.main:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn license_server.main:app --host 0.0.0.0 --port 8321 --reload
     restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
 
 secrets:
   admin_api_key:

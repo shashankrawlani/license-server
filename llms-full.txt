@@ -18,14 +18,16 @@ The user provides their email and basic details.
     "use_case": "Development"
   }
   ```
-- **Action**: The server stores a `VerificationRequest` and sends a verification email via Resend.
+- **Action**: The server stores a `VerificationRequest`.
+  - **Email Disabled (Default)**: Returns `verification_url` in the response. The application must send this link to the user.
+  - **Email Enabled**: Sends a verification email via Resend and returns `verification_url: null`.
 
 ### Step 2: Email Verification
 The user clicks the link in their email.
 - **Endpoint**: `GET /verify-email?token=xyz...`
-- **Action**: The server validates the token, creates a `community` tier license (valid for 10 years), and sends a second email containing:
-  - The **License Key**
-  - The **Public Key** (used for local verification)
+- **Action**: The server validates the token and creates a `community` tier license.
+  - **Email Disabled (Default)**: Returns the `license_key` in the API response.
+  - **Email Enabled**: Sends the license key via email.
 
 ### Step 3: Activation
 The user adds the `LICENSE_KEY` and `LICENSE_PUBLIC_KEY` to their application's `.env` file.

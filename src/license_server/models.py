@@ -1,8 +1,28 @@
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlmodel import SQLModel, Field, JSON, Column, DateTime
+from sqlmodel import SQLModel, Field, JSON, Column, DateTime, UniqueConstraint, String
+from sqlalchemy import ForeignKey
 import uuid
 from pydantic import EmailStr
+
+class App(SQLModel, table=True):
+    """Database model for an application using the license server.
+    
+    Attributes:
+        slug: Unique identifier for the app (e.g., 'routellm').
+        name: Human-readable name of the app.
+        api_key_hash: Argon2 hash of the app's secret API key.
+        created_at: Timestamp when the app was registered.
+    """
+    __tablename__ = "apps"
+    
+    slug: str = Field(primary_key=True)
+    name: str = Field(nullable=False)
+    api_key_hash: str = Field(index=True, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
 
 class LicenseBase(SQLModel):
     """Base schema for license data.
@@ -35,6 +55,7 @@ class License(LicenseBase, table=True):
         revoked_reason: Optional reason for revocation.
     """
     __tablename__ = "licenses"
+    __table_args__ = (UniqueConstraint("email", "app_id"),)
     
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -42,6 +63,7 @@ class License(LicenseBase, table=True):
         index=True,
         nullable=False,
     )
+    app_id: str = Field(sa_column=Column(String, ForeignKey("apps.slug", ondelete="RESTRICT"), index=True, nullable=False))
     license_key: str
     issued_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -103,6 +125,7 @@ class RegistrationResponse(SQLModel):
     message: str
     license_key: Optional[str] = None
     tier: Optional[str] = None
+    verification_url: Optional[str] = None
 
 class VerificationRequest(SQLModel, table=True):
     """Database model for self-service registration requests.
@@ -110,6 +133,7 @@ class VerificationRequest(SQLModel, table=True):
     Stores a temporary verification token sent via email.
     """
     __tablename__ = "verification_requests"
+    __table_args__ = (UniqueConstraint("email", "app_id"),)
     
     id: uuid.UUID = Field(
         default_factory=uuid.uuid4,
@@ -117,6 +141,7 @@ class VerificationRequest(SQLModel, table=True):
         index=True,
         nullable=False,
     )
+    app_id: str = Field(sa_column=Column(String, ForeignKey("apps.slug", ondelete="CASCADE"), index=True, nullable=False))
     email: EmailStr = Field(index=True)
     token: str = Field(index=True)
     expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))

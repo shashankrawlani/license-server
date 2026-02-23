@@ -11,7 +11,7 @@
 - **Endpoint**: `POST /register`
 - **Payload**: `RegistrationCreate`
 - **Rate Limit**: 5 requests per minute.
-- **Summary**: Initiates the registration flow and sends a verification email.
+- **Summary**: Initiates the registration flow. Returns `verification_url` (if email disabled) or sends email.
 
 ### Email Verification
 - **Endpoint**: `GET /verify-email`

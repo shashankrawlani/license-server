@@ -2,7 +2,7 @@
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![SQLModel](https://img.shields.io/badge/SQLModel-005571?style=for-the-badge&logo=sqlalchemy)](https://sqlmodel.tiangolo.com)
-[![Test Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen?style=for-the-badge)](https://github.com/shashankrawlani/license-server)
+[![Test Coverage](https://img.shields.io/badge/Coverage-99%25-brightgreen?style=for-the-badge)](https://github.com/shashankrawlani/license-server)
 
 A standalone, production-ready licensing service. Secure your premium features with RSA-signed licenses and a robust, multi-tenant-ready management API.
 
@@ -24,9 +24,9 @@ This project is optimized for LLMs. Access high-density context files from the r
 - **Standalone & Portable**: A "Lego brick" microservice that living in your app's namespace.
 - **Cryptographic Security**: RSA-2048 with PSS padding for non-forgeable, offline-verifiable keys.
 - **Generic Schema**: Extensible `tier`, `features`, and `license_metadata` fields to support any business model.
-- **Self-Service flow**: Built-in community registration with Resend email verification.
-- **High Performance**: Asynchronous implementation with PostgreSQL and connection pooling.
-- **100% Tested**: Comprehensive suite covering every line of code and failure mode.
+- **Hardened Security**: Runs as a non-root user with minimal privileges.
+- **Resource Efficient**: Strict CPU and memory limits for predictable performance.
+- **100% Verified**: Comprehensive suite covering every line of code and failure mode.
 
 ---
 
@@ -39,11 +39,16 @@ uv sync
 # Initialize DB and run (keys generated automatically on first start)
 PYTHONPATH=src uv run uvicorn license_server.main:app --host 0.0.0.0 --port 8321
 
-# Run the 100% covered test suite
+# Run the 99% covered test suite
 PYTHONPATH=src uv run pytest tests/ --cov=src/license_server
 ```
 
 ### Deployment (Docker)
+The service is designed to run as an isolated container with its own database connection.
+
+**Requirements**:
+- A PostgreSQL instance.
+
 ```bash
 docker-compose up -d
 ```

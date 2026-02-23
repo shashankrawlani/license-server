@@ -32,3 +32,4 @@ htmlcov/
 # Docker
 .docker/
 site/
+.playwright-cli/
