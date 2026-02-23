@@ -451,13 +451,13 @@ async def create_app(name: str, slug: str, session: AsyncSession = Depends(get_s
         "message": "Store this API key safely. It will not be shown again."
     }
 
-@router.get("/admin/apps", response_model=List[App], dependencies=[Depends(verify_admin)])
+@router.get("/admin/apps", response_model=List[App], dependencies=[Depends(verify_admin_only)])
 async def list_apps(session: AsyncSession = Depends(get_session)):
     """Lists all registered applications (Admin only)."""
     results = await session.execute(select(App))
     return results.scalars().all()
 
-@router.delete("/admin/apps/{slug}", dependencies=[Depends(verify_admin)])
+@router.delete("/admin/apps/{slug}", dependencies=[Depends(verify_admin_only)])
 async def delete_app(slug: str, session: AsyncSession = Depends(get_session)):
     """Deletes an application (Admin only).
     
